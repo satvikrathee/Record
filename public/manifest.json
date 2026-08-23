@@ -1,0 +1,26 @@
+{
+  "short_name": "Doodh Record",
+  "name": "Doodh Record - Personal Milk Tracker",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192"
+    },
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#FAF9F5",
+  "theme_color": "#5A7E71",
+  "display": "standalone",
+  "orientation": "portrait"
+}

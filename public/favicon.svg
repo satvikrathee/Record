@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Rounded container with sage green background -->
+  <rect width="512" height="512" rx="140" fill="#5A7E71"/>
+  <!-- Pure milk drop icon -->
+  <path d="M256 420c65.5 0 118.6-53.1 118.6-118.6c0-73-118.6-220.4-118.6-220.4s-118.6 147.4-118.6 220.4c0 65.5 53.1 118.6 118.6 118.6z" fill="#FFFFFF"/>
+  <!-- Drop highlight detail -->
+  <path d="M256 390a88 88 0 0 0 88-88c0-54-88-164-88-164s-88 110-88 164a88 88 0 0 0 88 88z" fill="#FAF9F5" opacity="0.3"/>
+</svg>
