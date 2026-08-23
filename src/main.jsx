@@ -9,16 +9,28 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
-// Register PWA Service Worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(reg => console.log('Service Worker registered successfully!', reg.scope))
-      .catch(err => console.log('Service Worker registration failed:', err));
-  });
-}
-
-// Handle Vite preload errors (e.g. after a new deployment) by reloading the page
+// Auto-reload if an outdated Vite chunk fails to load
 window.addEventListener('vite:preloadError', () => {
   window.location.reload();
 });
+
+// Register service worker with auto-update listener
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      reg.onupdatefound = () => {
+        const installingWorker = reg.installing;
+        if (installingWorker) {
+          installingWorker.onstatechange = () => {
+            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New content is available; auto reload the page
+              window.location.reload();
+            }
+          };
+        }
+      };
+    }).catch((err) => {
+      console.error('SW registration failed:', err);
+    });
+  });
+}
