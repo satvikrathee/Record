@@ -28,7 +28,7 @@ function readLocalDB() {
     if (!fs.existsSync(JSON_DB_FILE)) {
         // Initialize with default 10 persons
         const db = {
-            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Person ${i + 1}` })),
+            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Cow ${i + 1}` })),
             entries: [],
             configs: []
         };
@@ -38,14 +38,23 @@ function readLocalDB() {
     try {
         const raw = fs.readFileSync(JSON_DB_FILE, 'utf8');
         const data = JSON.parse(raw) || {};
-        if (!data.persons) data.persons = Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Person ${i + 1}` }));
+        if (!data.persons) data.persons = Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Cow ${i + 1}` }));
+        
+        // Migration for local file:
+        data.persons = data.persons.map(p => {
+            if (p.name && p.name.startsWith('Person ')) {
+                p.name = p.name.replace('Person ', 'Cow ');
+            }
+            return p;
+        });
+
         if (!data.entries) data.entries = [];
         if (!data.configs) data.configs = [];
         return data;
     } catch (e) {
         console.error('Error reading database.json, returning empty structure.', e);
         return {
-            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Person ${i + 1}` })),
+            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Cow ${i + 1}` })),
             entries: [],
             configs: []
         };
@@ -95,19 +104,28 @@ mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
       console.log('Connected to MongoDB database successfully.');
       useLocalJSON = false;
       
-      // Seed default persons if collection is empty
+      // Seed default cows if collection is empty
       try {
+          // Migration check: rename any existing "Person X" names to "Cow X"
+          const existingPersons = await Person.find();
+          for (let p of existingPersons) {
+              if (p.name && p.name.startsWith('Person ')) {
+                  p.name = p.name.replace('Person ', 'Cow ');
+                  await p.save();
+              }
+          }
+
           const count = await Person.countDocuments();
           if (count === 0) {
-              const defaultPeople = Array.from({ length: 10 }, (_, i) => ({
+              const defaultCows = Array.from({ length: 10 }, (_, i) => ({
                   personId: String(i + 1),
-                  name: `Person ${i + 1}`
+                  name: `Cow ${i + 1}`
               }));
-              await Person.insertMany(defaultPeople);
-              console.log('Seeded 10 default persons successfully.');
+              await Person.insertMany(defaultCows);
+              console.log('Seeded 10 default cows successfully.');
           }
       } catch (err) {
-          console.error('Error seeding default persons:', err.message);
+          console.error('Error migrating or seeding default cows:', err.message);
       }
   })
   .catch(err => {
@@ -384,7 +402,7 @@ app.get('/api/export/:month', async (req, res) => {
         }
 
         const rate = config.rate || 0;
-        let csv = `SATVIK DAIRY TRACK REPORT FOR: ${personName.toUpperCase()}\n`;
+        let csv = `SATVIK DAIRY TRACK REPORT FOR COW: ${personName.toUpperCase()}\n`;
         csv += `Month: ${month}\n\n`;
         csv += 'Date,Day,Morning Qty (Litre),Evening Qty (Litre),Daily Total (Litre),Rate (Rs/Litre),Amount (Rs)\n';
         

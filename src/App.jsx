@@ -63,6 +63,9 @@ export default function App() {
     const [modalNames, setModalNames] = useState({});
     const [activeTab, setActiveTab] = useState('log'); // 'log' or 'history'
 
+    // Sidebar State
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
     // Edit Modal State
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [editDate, setEditDate] = useState('');
@@ -476,90 +479,132 @@ export default function App() {
                 <button onClick={handleDismissBanner} className="banner-close-btn">&times;</button>
             </div>
 
-            <div className="app-container">
-                {/* Header */}
-                <header className="app-header">
-                    <div className="logo-area">
-                        <div className="logo-icon">
-                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7z" />
-                            </svg>
-                        </div>
+            <div className="app-layout">
+                {/* Mobile Header Bar */}
+                <div className="mobile-header">
+                    <button className="menu-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+                        ☰
+                    </button>
+                    <span className="mobile-app-title">Satvik Dairy Track</span>
+                    <div className="mobile-header-spacer"></div>
+                </div>
+
+                {/* Sidebar Drawer */}
+                <aside className={`app-sidebar ${isSidebarOpen ? 'open' : ''}`}>
+                    <div className="sidebar-header">
+                        <div className="logo-icon">💧</div>
                         <div>
-                            <h1>Satvik Dairy Track</h1>
+                            <h2>Satvik Dairy Track</h2>
                             <p className="subtitle">Daily Milk Tracker</p>
                         </div>
+                        <button className="close-sidebar-btn" onClick={() => setIsSidebarOpen(false)}>&times;</button>
                     </div>
-                                       <div className="header-controls">
-                        {/* Install App PWA Trigger */}
-                        {deferredPrompt && (
-                            <button onClick={handleInstallApp} className="btn btn-secondary btn-sm" title="Install Mobile App">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                                Install App
-                            </button>
-                        )}
 
-                        {/* Alerts Status Badge/Toggler */}
+                    {/* Active Profile */}
+                    <div className="sidebar-profile-card">
+                        <span className="profile-avatar">🐄</span>
+                        <div className="profile-info">
+                            <span className="profile-label">Active Cow</span>
+                            <span className="profile-name">
+                                {persons.find(p => p.personId === activePersonId)?.name || 'Loading...'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Switch Profile Dropdown */}
+                    <div className="sidebar-control-group">
+                        <label className="sidebar-control-label">Switch Cow</label>
+                        <select 
+                            value={activePersonId} 
+                            onChange={(e) => {
+                                setActivePersonId(e.target.value);
+                                setIsSidebarOpen(false);
+                            }} 
+                            className="sidebar-select"
+                        >
+                            {persons.map(p => (
+                                <option key={p.personId} value={p.personId}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Manage Members Settings */}
+                    <button onClick={() => setIsManageModalOpen(true)} className="sidebar-action-btn">
+                        ⚙️ Manage Cows
+                    </button>
+
+                    {/* Navigation Tab Selector */}
+                    <nav className="sidebar-nav">
+                        <button 
+                            className={`nav-item ${activeTab === 'log' ? 'active' : ''}`}
+                            onClick={() => {
+                                setActiveTab('log');
+                                setIsSidebarOpen(false);
+                            }}
+                        >
+                            ✍️ Log &amp; Summary
+                        </button>
+                        <button 
+                            className={`nav-item ${activeTab === 'history' ? 'active' : ''}`}
+                            onClick={() => {
+                                setActiveTab('history');
+                                setIsSidebarOpen(false);
+                            }}
+                        >
+                            📅 Daily Logs ({entries.length})
+                        </button>
+                    </nav>
+
+                    <div className="sidebar-divider"></div>
+
+                    {/* Quick Tools */}
+                    <div className="sidebar-section">
+                        <span className="sidebar-section-title">Quick Actions</span>
+                        
+                        <button onClick={handleDownloadCSV} className="sidebar-link-btn" title="Download Report">
+                            📥 Download Report
+                        </button>
+
+                        {/* Alerts Status */}
                         {notificationPermission === 'default' && (
-                            <button onClick={handleEnableBrowserNotifications} className="btn btn-secondary btn-sm" title="Enable Daily Reminders (11:00 AM & 9:00 PM)">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"></path>
-                                </svg>
-                                Enable Alerts
+                            <button onClick={handleEnableBrowserNotifications} className="sidebar-link-btn" title="Enable Alerts">
+                                🔔 Enable Alerts
                             </button>
                         )}
                         {notificationPermission === 'granted' && (
-                            <span className="btn btn-sm btn-outline active" style={{ cursor: 'default' }} title="Daily reminders will alert you if entries are missing">
+                            <div className="sidebar-status-badge active" title="Reminders active">
                                 🔔 Alerts: Active
-                            </span>
+                            </div>
                         )}
                         {notificationPermission === 'denied' && (
-                            <span className="btn btn-sm btn-outline" style={{ cursor: 'default', color: '#e74c3c', borderColor: 'rgba(231, 76, 60, 0.2)' }} title="Notifications blocked. Reset permission in browser settings.">
+                            <div className="sidebar-status-badge blocked" title="Notifications blocked">
                                 🔕 Alerts: Blocked
-                            </span>
+                            </div>
                         )}
 
-                        {/* Person Selection Dropdown */}
-                        <div className="month-selector-wrapper">
-                            <select 
-                                value={activePersonId} 
-                                onChange={(e) => setActivePersonId(e.target.value)} 
-                                className="month-select person-select"
-                                title="Select a family member's record"
-                            >
-                                {persons.map(p => (
-                                    <option key={p.personId} value={p.personId}>{p.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                        {/* PWA Install Button */}
+                        {deferredPrompt && (
+                            <button onClick={handleInstallApp} className="sidebar-link-btn primary" title="Install App">
+                                📱 Install Mobile App
+                            </button>
+                        )}
+                    </div>
 
-                        {/* Manage Names Button */}
-                        <button onClick={() => setIsManageModalOpen(true)} className="btn btn-export btn-sm" title="Manage names of all 10 profiles">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                                <circle cx="9" cy="7" r="4"></circle>
-                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                            </svg>
-                            Manage Names
-                        </button>
+                    <div className="sidebar-footer">
+                        <p>© 2026 Satvik Dairy Track</p>
+                        <p className="made-by">Made by Satvik Rathee</p>
+                    </div>
+                </aside>
 
-                        {/* Excel Export Button */}
-                        <button onClick={handleDownloadCSV} className="btn btn-export btn-sm" title="Download Monthly CSV Report">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            Download Report
-                        </button>
+                {/* Sidebar Backdrop Overlay on Mobile */}
+                {isSidebarOpen && <div className="sidebar-overlay-backdrop" onClick={() => setIsSidebarOpen(false)}></div>}
 
-                        {/* Month dropdown */}
-                        <div className="month-selector-wrapper">
+                {/* Main Content Area */}
+                <div className="app-main-content">
+                    <header className="app-header-bar">
+                        {/* Month Picker dropdown in top right */}
+                        <div className="month-picker-container">
+                            <span className="calendar-icon">📅</span>
                             <select 
                                 value={selectedMonth} 
                                 onChange={(e) => setSelectedMonth(e.target.value)} 
@@ -570,24 +615,7 @@ export default function App() {
                                 ))}
                             </select>
                         </div>
-                    </div>
-                </header>
-
-                {/* Tab Navigation selectors */}
-                <div className="tab-navigation">
-                    <button 
-                        className={`tab-btn ${activeTab === 'log' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('log')}
-                    >
-                        ✍️ Log &amp; Summary
-                    </button>
-                    <button 
-                        className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('history')}
-                    >
-                        📅 Daily Logs ({entries.length})
-                    </button>
-                </div>
+                    </header>
 
                 <main className="app-grid single-column">
                     {/* Left Panel */}
@@ -866,10 +894,8 @@ export default function App() {
                     </section>
                 </main>
 
-                <footer className="app-footer">
-                    <p>Satvik Dairy Track &copy; 2026. Made by Satvik Rathee.</p>
-                </footer>
-            </div>
+                </div> {/* Closes app-main-content */}
+            </div> {/* Closes app-layout */}
 
             {/* Edit Entry Modal Dialog */}
             <div className={`modal ${editModalOpen ? 'open' : ''}`}>
@@ -923,16 +949,16 @@ export default function App() {
             <div className={`modal ${isManageModalOpen ? 'open' : ''}`}>
                 <div className="modal-content large">
                     <div className="modal-header">
-                        <h2 className="modal-title">Manage Family Members</h2>
+                        <h2 className="modal-title">Manage Cows</h2>
                         <button className="modal-close" onClick={() => setIsManageModalOpen(false)}>&times;</button>
                     </div>
                     <div className="modal-body">
                         <form onSubmit={handleSaveAllNames}>
-                            <p className="help-text">Aap yahan sabhi 10 persons ke name customize kar sakte hain:</p>
+                            <p className="help-text">Aap yahan apni sabhi 10 cows ke name customize kar sakte hain:</p>
                             <div className="rename-grid">
                                 {persons.map(p => (
                                     <div key={p.personId} className="rename-field-row">
-                                        <label className="person-number-label">Person {p.personId}</label>
+                                        <label className="person-number-label">Cow {p.personId}</label>
                                         <input 
                                             type="text" 
                                             value={modalNames[p.personId] || ''} 
