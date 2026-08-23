@@ -58,13 +58,22 @@ export default function App() {
 
     // Multi-Person States
     const [persons, setPersons] = useState([]);
-    const [activePersonId, setActivePersonId] = useState('1');
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
     const [modalNames, setModalNames] = useState({});
-    const [activeTab, setActiveTab] = useState('log'); // 'log' or 'history'
+    const [activeTab, setActiveTab] = useState('log'); // 'log', 'history', or 'cows'
 
     // Sidebar State
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    // Cow Section Specific States
+    const [selectedCowId, setSelectedCowId] = useState('');
+    const [cowNotes, setCowNotes] = useState('');
+    const [cowNotesStatus, setCowNotesStatus] = useState('Saved');
+    const [newCowName, setNewCowName] = useState('');
+    const [isAddingCow, setIsAddingCow] = useState(false);
+    const [selectedRenameId, setSelectedRenameId] = useState(null);
+    const [renameValue, setRenameValue] = useState('');
+    const pendingCowNotesRef = useRef({ cowId: '', val: '', timeoutId: null });
 
     // Edit Modal State
     const [editModalOpen, setEditModalOpen] = useState(false);
@@ -110,12 +119,22 @@ export default function App() {
         localStorage.setItem('satvik_dairy_track_dismissed_v2', JSON.stringify(dismissedReminders));
     }, [dismissedReminders]);
 
-    // Fetch data whenever selectedMonth or activePersonId changes
+    // Fetch data whenever selectedMonth changes
     useEffect(() => {
-        if (activePersonId) {
-            fetchMonthData();
+        fetchMonthData();
+    }, [selectedMonth]);
+
+    // Fetch cow notes when active cow or selected month changes
+    useEffect(() => {
+        if (selectedCowId) {
+            fetchCowNotes(selectedCowId);
         }
-    }, [selectedMonth, activePersonId]);
+    }, [selectedCowId, selectedMonth]);
+
+    // Fetch all cow notes when selectedMonth or persons change
+    useEffect(() => {
+        fetchAllCowNotes();
+    }, [selectedMonth, persons]);
 
     // Background timer to check reminders every 30 seconds
     useEffect(() => {
@@ -136,9 +155,135 @@ export default function App() {
                     namesMap[p.personId] = p.name;
                 });
                 setModalNames(namesMap);
+                if (data.length > 0 && !selectedCowId) {
+                    setSelectedCowId(data[0].personId);
+                }
             }
         } catch (err) {
             console.error('Error fetching persons list:', err);
+        }
+    };
+
+    const [allCowNotes, setAllCowNotes] = useState({});
+
+    const fetchAllCowNotes = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/month-configs-all/${selectedMonth}`);
+            if (res.ok) {
+                const data = await res.json();
+                const notesMap = {};
+                data.forEach(c => {
+                    notesMap[c.personId] = c.notes;
+                });
+                setAllCowNotes(notesMap);
+            }
+        } catch (err) {
+            console.error('Error fetching all cow notes:', err);
+        }
+    };
+
+    const fetchCowNotes = async (cowId) => {
+        if (!cowId) return;
+        try {
+            const res = await fetch(`${API_BASE}/api/month-config/${selectedMonth}?personId=${cowId}`);
+            const data = await res.json();
+            setCowNotes(data.notes || '');
+            setCowNotesStatus('Saved');
+        } catch (err) {
+            console.error('Error loading cow notes:', err);
+        }
+    };
+
+    const saveCowNotes = async (cowId, val) => {
+        if (!cowId) return;
+        try {
+            setCowNotesStatus('Saving...');
+            await fetch(`${API_BASE}/api/month-config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    month: selectedMonth,
+                    notes: val,
+                    personId: cowId
+                })
+            });
+            setCowNotesStatus('Saved');
+            await fetchAllCowNotes();
+        } catch (err) {
+            console.error('Error saving cow notes:', err);
+            setCowNotesStatus('Error saving');
+        }
+    };
+
+    const handleCowNotesChange = (val) => {
+        setCowNotes(val);
+        setCowNotesStatus('Unsaved changes');
+    };
+
+    const handleCowSelect = async (cowId) => {
+        if (cowId === selectedCowId) return;
+        setSelectedCowId(cowId);
+    };
+
+    const handleAddCowSubmit = async (e) => {
+        e.preventDefault();
+        if (!newCowName.trim()) return;
+        setIsAddingCow(true);
+        try {
+            const res = await fetch(`${API_BASE}/api/persons`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newCowName.trim() })
+            });
+            if (res.ok) {
+                const newCow = await res.json();
+                setNewCowName('');
+                await fetchPersons();
+                setSelectedCowId(newCow.personId);
+            }
+        } catch (err) {
+            console.error('Error adding new cow:', err);
+        } finally {
+            setIsAddingCow(false);
+        }
+    };
+
+    const handleRenameSave = async (cowId) => {
+        if (!renameValue.trim()) {
+            setSelectedRenameId(null);
+            return;
+        }
+        try {
+            const res = await fetch(`${API_BASE}/api/persons/rename`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ personId: cowId, name: renameValue.trim() })
+            });
+            if (res.ok) {
+                setPersons(prev => prev.map(p => p.personId === cowId ? { ...p, name: renameValue.trim() } : p));
+                setSelectedRenameId(null);
+            }
+        } catch (err) {
+            console.error('Error renaming cow:', err);
+        }
+    };
+
+    const handleDeleteCow = async (cowId, cowName) => {
+        if (window.confirm(`Kya aap cow "${cowName}" ko delete karna chahte hain? Isse unke sabhi purane notes aur records bhi delete ho jayenge.`)) {
+            try {
+                const res = await fetch(`${API_BASE}/api/persons/${cowId}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    await fetchPersons();
+                    if (selectedCowId === cowId) {
+                        setSelectedCowId('');
+                        setCowNotes('');
+                    }
+                }
+            } catch (err) {
+                console.error('Error deleting cow:', err);
+            }
         }
     };
 
@@ -166,14 +311,14 @@ export default function App() {
     const fetchMonthData = async () => {
         try {
             // 1. Fetch entries
-            const entriesRes = await fetch(`${API_BASE}/api/entries/${selectedMonth}?personId=${activePersonId}`);
+            const entriesRes = await fetch(`${API_BASE}/api/entries/${selectedMonth}?personId=household`);
             const entriesData = await entriesRes.json();
             if (Array.isArray(entriesData)) {
                 setEntries(entriesData);
             }
 
             // 2. Fetch rate & notes configuration
-            const configRes = await fetch(`${API_BASE}/api/month-config/${selectedMonth}?personId=${activePersonId}`);
+            const configRes = await fetch(`${API_BASE}/api/month-config/${selectedMonth}?personId=household`);
             const configData = await configRes.json();
             setMonthlyRate(configData.rate > 0 ? configData.rate : '');
             setMonthlyNotes(configData.notes || '');
@@ -204,7 +349,7 @@ export default function App() {
                     date: formDate,
                     shift: formShift,
                     quantity: qty,
-                    personId: activePersonId
+                    personId: 'household'
                 })
             });
             const data = await res.json();
@@ -236,7 +381,7 @@ export default function App() {
                 body: JSON.stringify({
                     month: selectedMonth,
                     rate: parsedRate,
-                    personId: activePersonId
+                    personId: 'household'
                 })
             });
             setRateStatus('Saved ✓');
@@ -265,7 +410,7 @@ export default function App() {
                     body: JSON.stringify({
                         month: selectedMonth,
                         notes: val,
-                        personId: activePersonId
+                        personId: 'household'
                     })
                 });
                 setNotesStatus('Auto-saved');
@@ -280,7 +425,7 @@ export default function App() {
     const handleDeleteEntry = async (date) => {
         if (window.confirm(`Kya aap ${formatDisplayDate(date)} ka milk record delete karna chahte hain?`)) {
             try {
-                await fetch(`${API_BASE}/api/entries/${date}?personId=${activePersonId}`, { method: 'DELETE' });
+                await fetch(`${API_BASE}/api/entries/${date}?personId=household`, { method: 'DELETE' });
                 await fetchMonthData();
             } catch (err) {
                 console.error('Error deleting entry:', err);
@@ -308,7 +453,7 @@ export default function App() {
                     date: editDate,
                     morning: parseFloat(editMorningQty) || 0,
                     evening: parseFloat(editEveningQty) || 0,
-                    personId: activePersonId
+                    personId: 'household'
                 })
             });
             setEditModalOpen(false);
@@ -321,7 +466,7 @@ export default function App() {
     // --- CSV Download Handler ---
     const handleDownloadCSV = () => {
         // Simple download action: open the browser endpoint in a new tab/window
-        window.open(`${API_BASE}/api/export/${selectedMonth}?personId=${activePersonId}`, '_blank');
+        window.open(`${API_BASE}/api/export/${selectedMonth}?personId=household`, '_blank');
     };
 
     // --- Notifications & Reminders Engine ---
@@ -500,39 +645,6 @@ export default function App() {
                         <button className="close-sidebar-btn" onClick={() => setIsSidebarOpen(false)}>&times;</button>
                     </div>
 
-                    {/* Active Profile */}
-                    <div className="sidebar-profile-card">
-                        <span className="profile-avatar">🐄</span>
-                        <div className="profile-info">
-                            <span className="profile-label">Active Cow</span>
-                            <span className="profile-name">
-                                {persons.find(p => p.personId === activePersonId)?.name || 'Loading...'}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Switch Profile Dropdown */}
-                    <div className="sidebar-control-group">
-                        <label className="sidebar-control-label">Switch Cow</label>
-                        <select 
-                            value={activePersonId} 
-                            onChange={(e) => {
-                                setActivePersonId(e.target.value);
-                                setIsSidebarOpen(false);
-                            }} 
-                            className="sidebar-select"
-                        >
-                            {persons.map(p => (
-                                <option key={p.personId} value={p.personId}>{p.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Manage Members Settings */}
-                    <button onClick={() => setIsManageModalOpen(true)} className="sidebar-action-btn">
-                        ⚙️ Manage Cows
-                    </button>
-
                     {/* Navigation Tab Selector */}
                     <nav className="sidebar-nav">
                         <button 
@@ -552,6 +664,15 @@ export default function App() {
                             }}
                         >
                             📅 Daily Logs ({entries.length})
+                        </button>
+                        <button 
+                            className={`nav-item ${activeTab === 'cows' ? 'active' : ''}`}
+                            onClick={() => {
+                                setActiveTab('cows');
+                                setIsSidebarOpen(false);
+                            }}
+                        >
+                            🐄 Cows Section
                         </button>
                     </nav>
 
@@ -892,6 +1013,147 @@ export default function App() {
                             </div>
                         </div>
                     </section>
+
+                    {/* Cows Manager Panel */}
+                    <section className={`left-panel ${activeTab === 'cows' ? '' : 'hidden-panel'}`} style={{ maxWidth: '100%' }}>
+                        <div className="summary-section">
+                            <h2 className="section-title">🐄 Cows Manager &amp; Individual Notes</h2>
+                            
+                            <div className="cows-container-layout">
+                                {/* Left Column: Cow List & Sidebar */}
+                                <div className="cows-sidebar-panel">
+                                    {/* Add Cow Card */}
+                                    <div className="card cow-sidebar-card">
+                                        <h3 className="card-title" style={{ fontSize: '1rem', marginBottom: '10px' }}>➕ Add New Cow</h3>
+                                        <form onSubmit={handleAddCowSubmit} className="add-cow-sidebar-form">
+                                            <input 
+                                                type="text" 
+                                                placeholder="Cow Name (e.g. Cow 11)" 
+                                                value={newCowName}
+                                                onChange={(e) => setNewCowName(e.target.value)}
+                                                className="form-control add-cow-input-sidebar"
+                                                disabled={isAddingCow}
+                                            />
+                                            <button type="submit" className="btn btn-primary add-cow-btn-sidebar" style={{ padding: '8px 12px', borderRadius: '10px' }} disabled={isAddingCow}>
+                                                {isAddingCow ? '...' : 'Add'}
+                                            </button>
+                                        </form>
+                                    </div>
+
+                                    {/* Cows Scroll List */}
+                                    <div className="cows-scroll-list">
+                                        {persons.map(cow => {
+                                            const cowNote = allCowNotes[cow.personId] || '';
+                                            const isSelected = selectedCowId === cow.personId;
+                                            return (
+                                                <div 
+                                                    key={cow.personId} 
+                                                    className={`cow-list-card ${isSelected ? 'active' : ''}`}
+                                                    onClick={() => handleCowSelect(cow.personId)}
+                                                >
+                                                    <div className="cow-card-header">
+                                                        <span className="cow-card-icon">🐄</span>
+                                                        <span className="cow-card-name">{cow.name}</span>
+                                                    </div>
+                                                    <div className="cow-card-notes-preview">
+                                                        {cowNote.trim() ? (
+                                                            cowNote
+                                                        ) : (
+                                                            <span className="no-notes-placeholder">No notes for this month</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Right Column: Cow Editor */}
+                                <div className="cow-editor-panel">
+                                    {selectedCowId ? (
+                                        <div className="card cow-details-editor-card">
+                                            <div className="cow-editor-header">
+                                                <div className="cow-editor-title-group">
+                                                    <h2 className="cow-editor-title">🐄 {persons.find(p => p.personId === selectedCowId)?.name}</h2>
+                                                    <p className="cow-editor-subtitle">ID: {selectedCowId} | Month: {selectedMonth}</p>
+                                                </div>
+                                                
+                                                <div className="cow-editor-actions">
+                                                    {selectedRenameId === selectedCowId ? (
+                                                        <div className="inline-rename-container">
+                                                            <input 
+                                                                type="text"
+                                                                value={renameValue}
+                                                                onChange={(e) => setRenameValue(e.target.value)}
+                                                                className="form-control rename-input-inline"
+                                                                placeholder="Enter Name"
+                                                                autoFocus
+                                                            />
+                                                            <button onClick={() => handleRenameSave(selectedCowId)} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.85rem', borderRadius: '8px', marginRight: '4px' }}>Save</button>
+                                                            <button onClick={() => setSelectedRenameId(null)} className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '0.85rem', borderRadius: '8px' }}>Cancel</button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="action-buttons-group">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setSelectedRenameId(selectedCowId);
+                                                                    setRenameValue(persons.find(p => p.personId === selectedCowId)?.name || '');
+                                                                }} 
+                                                                className="btn btn-outline"
+                                                                style={{ padding: '6px 12px', fontSize: '0.85rem', borderRadius: '8px', marginRight: '4px' }}
+                                                            >
+                                                                ✏️ Rename
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteCow(selectedCowId, persons.find(p => p.personId === selectedCowId)?.name || '')} 
+                                                                className="btn-danger"
+                                                                style={{ padding: '6px 12px', fontSize: '0.85rem', borderRadius: '8px' }}
+                                                            >
+                                                                🗑️ Delete
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <hr className="editor-divider" style={{ border: 'none', borderBottom: '1px solid var(--border)', margin: '16px 0' }} />
+
+                                            <div className="cow-notes-editor-section">
+                                                <div className="notes-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                    <label className="field-label" style={{ margin: 0 }}>📝 Notes</label>
+                                                    <div className="notes-status-badge" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+                                                        <span className={`status-dot ${cowNotesStatus === 'Saved' ? 'saved' : cowNotesStatus === 'Saving...' ? 'saving' : 'unsaved'}`}></span>
+                                                        <span className="status-text">{cowNotesStatus}</span>
+                                                    </div>
+                                                </div>
+                                                <textarea
+                                                    className="form-control cow-notes-textarea-small"
+                                                    placeholder={`Write details for ${persons.find(p => p.personId === selectedCowId)?.name || 'this cow'} in ${selectedMonth}...`}
+                                                    value={cowNotes}
+                                                    onChange={(e) => handleCowNotesChange(e.target.value)}
+                                                />
+                                                <div className="notes-save-action-row" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                                                    <button 
+                                                        onClick={() => saveCowNotes(selectedCowId, cowNotes)}
+                                                        className="btn btn-primary save-notes-btn"
+                                                        style={{ padding: '10px 20px', borderRadius: '12px', fontWeight: '600' }}
+                                                    >
+                                                        💾 Save Notes
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="card select-cow-placeholder-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', minHeight: '300px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                            <div className="placeholder-icon" style={{ fontSize: '3rem', marginBottom: '15px' }}>🐄</div>
+                                            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px', color: 'var(--text-main)' }}>No Cow Selected</h3>
+                                            <p style={{ fontSize: '0.9rem', maxWidth: '300px' }}>Select a cow from the left panel to view and manage details &amp; notes.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
                 </main>
 
                 </div> {/* Closes app-main-content */}
@@ -945,38 +1207,7 @@ export default function App() {
                 </div>
             </div>
 
-            {/* Manage Family Members Names Modal Dialog */}
-            <div className={`modal ${isManageModalOpen ? 'open' : ''}`}>
-                <div className="modal-content large">
-                    <div className="modal-header">
-                        <h2 className="modal-title">Manage Cows</h2>
-                        <button className="modal-close" onClick={() => setIsManageModalOpen(false)}>&times;</button>
-                    </div>
-                    <div className="modal-body">
-                        <form onSubmit={handleSaveAllNames}>
-                            <p className="help-text">Aap yahan apni sabhi 10 cows ke name customize kar sakte hain:</p>
-                            <div className="rename-grid">
-                                {persons.map(p => (
-                                    <div key={p.personId} className="rename-field-row">
-                                        <label className="person-number-label">Cow {p.personId}</label>
-                                        <input 
-                                            type="text" 
-                                            value={modalNames[p.personId] || ''} 
-                                            onChange={(e) => setModalNames({ ...modalNames, [p.personId]: e.target.value })}
-                                            className="rename-input"
-                                            required
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="modal-footer-actions">
-                                <button type="button" className="btn btn-outline" onClick={() => setIsManageModalOpen(false)}>Cancel</button>
-                                <button type="submit" className="btn btn-primary">Save All Changes</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
+            {/* Manage Cows modal is no longer needed since it's fully managed inline in the tab */}
         </>
     );
 }

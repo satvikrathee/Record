@@ -1519,6 +1519,397 @@ body {
         margin-bottom: 20px;
     }
 }
+/* Cow notes control bar styling */
+.cow-notes-controls-bar {
+    display: flex;
+    gap: 30px;
+    align-items: flex-end;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
 
+.control-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
 
+.control-field:first-child {
+    flex: 1;
+    min-width: 280px;
+}
 
+.field-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.select-actions-wrapper {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+}
+
+.cow-dropdown-select {
+    flex: 1;
+    min-width: 180px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background-color: var(--bg-main);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.action-buttons-group {
+    display: flex;
+    gap: 8px;
+}
+
+.inline-rename-container {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex: 1.5;
+}
+
+.rename-input-inline {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--accent);
+    font-size: 0.9rem;
+    background-color: var(--bg-card);
+    color: var(--text-main);
+}
+
+.add-cow-inline-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.add-cow-input {
+    width: 200px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background-color: var(--bg-main);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+}
+
+.cow-notes-full-card {
+    width: 100%;
+    margin-top: 20px;
+}
+
+.full-width-textarea {
+    min-height: 420px;
+    width: 100%;
+    border-radius: 12px;
+    padding: 18px;
+    font-size: 1rem;
+    line-height: 1.6;
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+
+.notes-editor-wrapper {
+    position: relative;
+}
+
+.notes-status-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-end;
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-dot.saved {
+    background-color: #2ecc71;
+}
+
+.status-dot.saving {
+    background-color: #f39c12;
+}
+
+@media (max-width: 768px) {
+    .cow-notes-controls-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+    .select-actions-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .action-buttons-group {
+        justify-content: flex-end;
+    }
+    .add-cow-input {
+        width: 100%;
+    }
+    .add-cow-inline-form {
+        width: 100%;
+    }
+}
+
+/* Redesigned Cows Section Two-Column Layout */
+.cows-container-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    width: 100%;
+    margin-top: 20px;
+}
+
+/* Sidebar Panel (Left) */
+.cows-sidebar-panel {
+    flex: 0 0 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.cow-sidebar-card {
+    padding: 16px 20px;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-subtle);
+}
+
+.add-cow-sidebar-form {
+    display: flex;
+    gap: 8px;
+}
+
+.add-cow-input-sidebar {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    font-size: 0.9rem;
+    transition: border-color var(--transition-fast);
+}
+
+.add-cow-input-sidebar:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.add-cow-btn-sidebar {
+    flex-shrink: 0;
+}
+
+/* Cows Scroll List */
+.cows-scroll-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 520px;
+    overflow-y: auto;
+    padding-right: 6px;
+}
+
+/* Scrollbar styling for list */
+.cows-scroll-list::-webkit-scrollbar {
+    width: 6px;
+}
+.cows-scroll-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+.cows-scroll-list::-webkit-scrollbar-thumb {
+    background: rgba(90, 126, 113, 0.2);
+    border-radius: 4px;
+}
+.cows-scroll-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(90, 126, 113, 0.4);
+}
+
+/* Cow List Item Card */
+.cow-list-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cow-list-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-normal);
+    background-color: var(--primary-light);
+}
+
+.cow-list-card.active {
+    border: 2px solid var(--primary);
+    background-color: var(--primary-light);
+    box-shadow: var(--shadow-active);
+}
+
+.cow-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.cow-card-icon {
+    font-size: 1.15rem;
+}
+
+.cow-card-name {
+    font-family: var(--font-heading);
+    font-size: 0.95rem;
+}
+
+.cow-card-notes-preview {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.4;
+    max-width: 100%;
+}
+
+.cow-card-notes-preview .no-notes-placeholder {
+    color: #b0b9b5;
+    font-style: italic;
+}
+
+/* Editor Panel (Right) */
+.cow-editor-panel {
+    flex: 1;
+    min-width: 0;
+}
+
+.cow-details-editor-card {
+    padding: 24px;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-subtle);
+    width: 100%;
+}
+
+.cow-editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.cow-editor-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cow-editor-title {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 1.35rem;
+    color: var(--text-main);
+}
+
+.cow-editor-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.cow-editor-actions {
+    display: flex;
+    align-items: center;
+}
+
+/* Redesigned Smaller Notes Textarea */
+.cow-notes-textarea-small {
+    width: 100%;
+    height: 150px;
+    min-height: 120px;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    font-family: inherit;
+    resize: vertical;
+    transition: border-color var(--transition-fast);
+}
+
+.cow-notes-textarea-small:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+/* Unsaved state colors */
+.status-dot.unsaved {
+    background-color: #95a5a6;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+    .cows-container-layout {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .cows-sidebar-panel {
+        flex: none;
+        width: 100%;
+    }
+    
+    .cows-scroll-list {
+        max-height: 250px;
+    }
+}

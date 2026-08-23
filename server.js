@@ -153,6 +153,29 @@ app.get('/api/persons', async (req, res) => {
     }
 });
 
+// 1.5 Add a new cow profile
+app.post('/api/persons', async (req, res) => {
+    const { name } = req.body;
+    if (!name) {
+        return res.status(400).json({ error: 'Name is required.' });
+    }
+    const id = 'cow-' + Date.now();
+    if (useLocalJSON) {
+        const db = readLocalDB();
+        const newCow = { personId: id, name };
+        db.persons.push(newCow);
+        writeLocalDB(db);
+        return res.json(newCow);
+    }
+    try {
+        const newCow = new Person({ personId: id, name });
+        await newCow.save();
+        res.json(newCow);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 2. Rename person profile
 app.post('/api/persons/rename', async (req, res) => {
     const { personId, name } = req.body;
@@ -172,6 +195,25 @@ app.post('/api/persons/rename', async (req, res) => {
     try {
         const p = await Person.findOneAndUpdate({ personId }, { name }, { new: true });
         res.json(p);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. Delete cow profile
+app.delete('/api/persons/:personId', async (req, res) => {
+    const { personId } = req.params;
+    if (useLocalJSON) {
+        const db = readLocalDB();
+        db.persons = db.persons.filter(p => p.personId !== personId);
+        db.configs = db.configs.filter(c => c.personId !== personId);
+        writeLocalDB(db);
+        return res.json({ success: true });
+    }
+    try {
+        await Person.deleteOne({ personId });
+        await MonthConfig.deleteMany({ personId });
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -339,6 +381,25 @@ app.get('/api/month-config/:month', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// 7.5 Fetch rate and notes config for all cows for a month
+app.get('/api/month-configs-all/:month', async (req, res) => {
+    const month = req.params.month;
+
+    if (useLocalJSON) {
+        const db = readLocalDB();
+        const configs = db.configs.filter(c => c.month === month);
+        return res.json(configs);
+    }
+
+    try {
+        const configs = await MonthConfig.find({ month });
+        res.json(configs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 // 8. Save/update rate and notes config for a month
 app.post('/api/month-config', async (req, res) => {
