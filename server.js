@@ -28,9 +28,10 @@ function readLocalDB() {
     if (!fs.existsSync(JSON_DB_FILE)) {
         // Initialize with default 10 persons
         const db = {
-            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Cow ${i + 1}` })),
+            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Cow ${i + 1}`, image: '' })),
             entries: [],
-            configs: []
+            configs: [],
+            expenditures: []
         };
         writeLocalDB(db);
         return db;
@@ -38,25 +39,30 @@ function readLocalDB() {
     try {
         const raw = fs.readFileSync(JSON_DB_FILE, 'utf8');
         const data = JSON.parse(raw) || {};
-        if (!data.persons) data.persons = Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Cow ${i + 1}` }));
+        if (!data.persons) data.persons = Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Cow ${i + 1}`, image: '' }));
         
         // Migration for local file:
         data.persons = data.persons.map(p => {
             if (p.name && p.name.startsWith('Person ')) {
                 p.name = p.name.replace('Person ', 'Cow ');
             }
+            if (p.image === undefined) {
+                p.image = '';
+            }
             return p;
         });
 
         if (!data.entries) data.entries = [];
         if (!data.configs) data.configs = [];
+        if (!data.expenditures) data.expenditures = [];
         return data;
     } catch (e) {
         console.error('Error reading database.json, returning empty structure.', e);
         return {
-            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Cow ${i + 1}` })),
+            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Cow ${i + 1}`, image: '' })),
             entries: [],
-            configs: []
+            configs: [],
+            expenditures: []
         };
     }
 }
@@ -72,7 +78,8 @@ function writeLocalDB(data) {
 // Schemas & Models
 const PersonSchema = new mongoose.Schema({
     personId: { type: String, required: true, unique: true },
-    name: { type: String, required: true }
+    name: { type: String, required: true },
+    image: { type: String, default: '' }
 });
 
 const EntrySchema = new mongoose.Schema({
@@ -93,9 +100,17 @@ const MonthConfigSchema = new mongoose.Schema({
 // Compound index to ensure uniqueness of rates/notes per person per month
 MonthConfigSchema.index({ month: 1, personId: 1 }, { unique: true });
 
+const ExpenditureSchema = new mongoose.Schema({
+    month: { type: String, required: true }, // Format: YYYY-MM
+    title: { type: String, required: true },
+    amount: { type: Number, required: true },
+    date: { type: String, required: true } // Format: YYYY-MM-DD
+});
+
 const Person = mongoose.model('Person', PersonSchema);
 const Entry = mongoose.model('Entry', EntrySchema);
 const MonthConfig = mongoose.model('MonthConfig', MonthConfigSchema);
+const Expenditure = mongoose.model('Expenditure', ExpenditureSchema);
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/doodh-record';
@@ -495,6 +510,91 @@ app.get('/api/export/:month', async (req, res) => {
         res.status(200).send(csv);
     } catch (err) {
         res.status(500).send('Error generating export file: ' + err.message);
+    }
+});
+
+// 10. Fetch expenditures for a specific month
+app.get('/api/expenditures/:month', async (req, res) => {
+    const month = req.params.month;
+    if (useLocalJSON) {
+        const db = readLocalDB();
+        const list = db.expenditures.filter(e => e.month === month);
+        return res.json(list);
+    }
+    try {
+        const list = await Expenditure.find({ month }).sort({ date: -1 });
+        res.json(list);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 11. Add a new expenditure
+app.post('/api/expenditures', async (req, res) => {
+    const { month, title, amount, date } = req.body;
+    if (!month || !title || amount === undefined || !date) {
+        return res.status(400).json({ error: 'All fields are required.' });
+    }
+    const parsedAmt = parseFloat(amount) || 0;
+    const id = 'exp-' + Date.now();
+    if (useLocalJSON) {
+        const db = readLocalDB();
+        const newExp = { id, month, title, amount: parsedAmt, date };
+        db.expenditures.push(newExp);
+        writeLocalDB(db);
+        return res.json(newExp);
+    }
+    try {
+        const newExp = new Expenditure({ month, title, amount: parsedAmt, date });
+        await newExp.save();
+        res.json(newExp);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 12. Delete an expenditure
+app.delete('/api/expenditures/:id', async (req, res) => {
+    const id = req.params.id;
+    if (useLocalJSON) {
+        const db = readLocalDB();
+        db.expenditures = db.expenditures.filter(e => e.id !== id);
+        writeLocalDB(db);
+        return res.json({ success: true });
+    }
+    try {
+        await Expenditure.findByIdAndDelete(id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 13. Save a cow's photo (Base64)
+app.post('/api/persons/image', async (req, res) => {
+    const { personId, image } = req.body;
+    if (!personId) {
+        return res.status(400).json({ error: 'personId is required.' });
+    }
+    if (useLocalJSON) {
+        const db = readLocalDB();
+        const idx = db.persons.findIndex(p => p.personId === personId);
+        if (idx !== -1) {
+            db.persons[idx].image = image || '';
+            writeLocalDB(db);
+            return res.json(db.persons[idx]);
+        }
+        return res.status(404).json({ error: 'Cow profile not found.' });
+    }
+    try {
+        const p = await Person.findOneAndUpdate({ personId }, { image: image || '' }, { new: true });
+        if (p) {
+            res.json(p);
+        } else {
+            res.status(404).json({ error: 'Cow profile not found.' });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

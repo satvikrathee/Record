@@ -1913,3 +1913,53 @@ body {
         max-height: 250px;
     }
 }
+
+/* Premium Cow Avatar & Thumbnail Styling */
+.cow-profile-avatar-wrapper {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--primary-light);
+    box-shadow: var(--shadow-subtle);
+    transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.cow-profile-avatar-wrapper:hover {
+    transform: scale(1.05);
+    border-color: var(--primary-hover);
+}
+
+.avatar-hover-overlay {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+    font-size: 1rem;
+}
+
+.cow-profile-avatar-wrapper:hover .avatar-hover-overlay {
+    opacity: 1;
+}
+
+.cow-card-thumbnail {
+    border: 1px solid var(--primary);
+    box-shadow: var(--shadow-subtle);
+    margin-right: 4px;
+}
+
+.red-icon {
+    background-color: rgba(231, 76, 60, 0.1) !important;
+    color: #e74c3c !important;
+}

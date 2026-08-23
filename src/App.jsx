@@ -81,6 +81,13 @@ export default function App() {
     const [editMorningQty, setEditMorningQty] = useState('');
     const [editEveningQty, setEditEveningQty] = useState('');
 
+    // Expenditure States
+    const [expenditures, setExpenditures] = useState([]);
+    const [expTitle, setExpTitle] = useState('');
+    const [expAmount, setExpAmount] = useState('');
+    const [expDate, setExpDate] = useState(todayStr);
+    const [isExpModalOpen, setIsExpModalOpen] = useState(false);
+
     // Refs for debouncing notes auto-save
     const notesTimeoutRef = useRef(null);
 
@@ -322,8 +329,125 @@ export default function App() {
             const configData = await configRes.json();
             setMonthlyRate(configData.rate > 0 ? configData.rate : '');
             setMonthlyNotes(configData.notes || '');
+
+            // Fetch expenditures
+            await fetchExpenditures();
         } catch (err) {
             console.error('Error fetching data from server:', err);
+        }
+    };
+
+    const fetchExpenditures = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/expenditures/${selectedMonth}`);
+            if (res.ok) {
+                const data = await res.json();
+                setExpenditures(data);
+            }
+        } catch (err) {
+            console.error('Error fetching expenditures:', err);
+        }
+    };
+
+    const handleAddExpenditure = async (e) => {
+        e.preventDefault();
+        if (!expTitle.trim() || !expAmount) return;
+        try {
+            const res = await fetch(`${API_BASE}/api/expenditures`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    month: selectedMonth,
+                    title: expTitle.trim(),
+                    amount: parseFloat(expAmount),
+                    date: expDate
+                })
+            });
+            if (res.ok) {
+                setExpTitle('');
+                setExpAmount('');
+                setExpDate(todayStr);
+                setIsExpModalOpen(false);
+                await fetchExpenditures();
+            }
+        } catch (err) {
+            console.error('Error adding expenditure:', err);
+        }
+    };
+
+    const handleDeleteExpenditure = async (id) => {
+        if (window.confirm('Kya aap is expenditure ko delete karna chahte hain?')) {
+            try {
+                const res = await fetch(`${API_BASE}/api/expenditures/${id}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    await fetchExpenditures();
+                }
+            } catch (err) {
+                console.error('Error deleting expenditure:', err);
+            }
+        }
+    };
+
+    const handleCowImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Compress image client side
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const maxDim = 300;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > maxDim) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    }
+                } else {
+                    if (height > maxDim) {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Compress and convert to Base64 data URL
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                uploadCowImage(selectedCowId, dataUrl);
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const uploadCowImage = async (cowId, dataUrl) => {
+        try {
+            setCowNotesStatus('Saving Image...');
+            const res = await fetch(`${API_BASE}/api/persons/image`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ personId: cowId, image: dataUrl })
+            });
+            if (res.ok) {
+                setCowNotesStatus('Image Saved');
+                // Refresh persons list to reflect new image thumbnail
+                await fetchPersons();
+            } else {
+                setCowNotesStatus('Image Error');
+            }
+        } catch (err) {
+            console.error('Error uploading cow image:', err);
+            setCowNotesStatus('Image Error');
         }
     };
 
@@ -664,6 +788,15 @@ export default function App() {
                             }}
                         >
                             📅 Daily Logs ({entries.length})
+                        </button>
+                        <button 
+                            className={`nav-item ${activeTab === 'expenditures' ? 'active' : ''}`}
+                            onClick={() => {
+                                setActiveTab('expenditures');
+                                setIsSidebarOpen(false);
+                            }}
+                        >
+                            💰 Expenditures
                         </button>
                         <button 
                             className={`nav-item ${activeTab === 'cows' ? 'active' : ''}`}
@@ -1014,6 +1147,107 @@ export default function App() {
                         </div>
                     </section>
 
+                    {/* Expenditures Manager Panel */}
+                    <section className={`left-panel ${activeTab === 'expenditures' ? '' : 'hidden-panel'}`} style={{ maxWidth: '100%' }}>
+                        <div className="summary-section">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                                <h2 className="section-title" style={{ margin: 0 }}>💰 Monthly Income &amp; Expenditures</h2>
+                                <button 
+                                    onClick={() => {
+                                        setExpTitle('');
+                                        setExpAmount('');
+                                        setExpDate(todayStr);
+                                        setIsExpModalOpen(true);
+                                    }} 
+                                    className="btn btn-primary"
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderRadius: '12px', fontWeight: '600' }}
+                                >
+                                    ➕ Add Expenditure
+                                </button>
+                            </div>
+                            
+                            {/* Summary Metrics Row */}
+                            <div className="summary-cards" style={{ marginBottom: '30px' }}>
+                                {/* Income Card */}
+                                <div className="card summary-card milk-card">
+                                    <div className="card-header">
+                                        <span>Total Income (Main Home)</span>
+                                        <div className="card-icon blue-icon">💰</div>
+                                    </div>
+                                    <div className="card-body">
+                                        <span className="currency-symbol">₹</span>
+                                        <span className="metric-value">{Math.round(totalAmount).toLocaleString('en-IN')}</span>
+                                    </div>
+                                </div>
+
+                                {/* Total Expenditures Card */}
+                                <div className="card summary-card rate-card">
+                                    <div className="card-header">
+                                        <span>Total Expenditures</span>
+                                        <div className="card-icon red-icon" style={{ color: '#e74c3c' }}>📉</div>
+                                    </div>
+                                    <div className="card-body">
+                                        <span className="currency-symbol">₹</span>
+                                        <span className="metric-value">
+                                            {Math.round(expenditures.reduce((sum, e) => sum + (e.amount || 0), 0)).toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Net Profit Card */}
+                                <div className="card summary-card amount-card">
+                                    <div className="card-header">
+                                        <span>Net Balance</span>
+                                        <div className="card-icon gold-icon">📈</div>
+                                    </div>
+                                    <div className="card-body">
+                                        <span className="currency-symbol">₹</span>
+                                        <span className="metric-value">
+                                            {Math.round(totalAmount - expenditures.reduce((sum, e) => sum + (e.amount || 0), 0)).toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Expenditures Timeline List */}
+                            <div className="card timeline-container" style={{ padding: '24px' }}>
+                                <h3 className="card-title" style={{ marginBottom: '16px' }}>Expenditure Records</h3>
+                                <div className="timeline-list">
+                                    {expenditures.length === 0 ? (
+                                        <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
+                                            <div className="empty-state-icon" style={{ fontSize: '2.5rem', marginBottom: '10px' }}>💸</div>
+                                            <h3>No expenditures recorded</h3>
+                                            <p>Click the "+ Add Expenditure" button above to log feeds, medicine, or other cow care costs.</p>
+                                        </div>
+                                    ) : (
+                                        expenditures.map(exp => (
+                                            <div className="log-row" key={exp.id || exp._id} style={{ padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
+                                                    <strong style={{ fontSize: '1rem', color: 'var(--text-main)' }}>{exp.title}</strong>
+                                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDisplayDate(exp.date)}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                    <span style={{ fontSize: '1.1rem', fontWeight: '700', color: '#e74c3c' }}>- ₹{exp.amount}</span>
+                                                    <button 
+                                                        onClick={() => handleDeleteExpenditure(exp.id || exp._id)} 
+                                                        className="action-btn delete-btn" 
+                                                        title="Delete Record"
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                                                    >
+                                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                     {/* Cows Manager Panel */}
                     <section className={`left-panel ${activeTab === 'cows' ? '' : 'hidden-panel'}`} style={{ maxWidth: '100%' }}>
                         <div className="summary-section">
@@ -1052,7 +1286,11 @@ export default function App() {
                                                     onClick={() => handleCowSelect(cow.personId)}
                                                 >
                                                     <div className="cow-card-header">
-                                                        <span className="cow-card-icon">🐄</span>
+                                                        {cow.image ? (
+                                                            <img src={cow.image} alt={cow.name} className="cow-card-thumbnail" style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <span className="cow-card-icon">🐄</span>
+                                                        )}
                                                         <span className="cow-card-name">{cow.name}</span>
                                                     </div>
                                                     <div className="cow-card-notes-preview">
@@ -1072,10 +1310,35 @@ export default function App() {
                                 <div className="cow-editor-panel">
                                     {selectedCowId ? (
                                         <div className="card cow-details-editor-card">
-                                            <div className="cow-editor-header">
-                                                <div className="cow-editor-title-group">
-                                                    <h2 className="cow-editor-title">🐄 {persons.find(p => p.personId === selectedCowId)?.name}</h2>
-                                                    <p className="cow-editor-subtitle">ID: {selectedCowId} | Month: {selectedMonth}</p>
+                                            <div className="cow-editor-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: '16px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                    {/* Cow Profile Photo Avatar */}
+                                                    <div 
+                                                        className="cow-profile-avatar-wrapper" 
+                                                        onClick={() => document.getElementById('cow-photo-upload-input').click()}
+                                                        title="Click to Upload Cow Photo"
+                                                    >
+                                                        {persons.find(p => p.personId === selectedCowId)?.image ? (
+                                                            <img src={persons.find(p => p.personId === selectedCowId)?.image} alt="Cow Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <span style={{ fontSize: '1.8rem' }}>🐄</span>
+                                                        )}
+                                                        <div className="avatar-hover-overlay">
+                                                            <span>📷</span>
+                                                        </div>
+                                                    </div>
+                                                    <input 
+                                                        type="file" 
+                                                        id="cow-photo-upload-input" 
+                                                        style={{ display: 'none' }} 
+                                                        accept="image/*"
+                                                        onChange={handleCowImageUpload}
+                                                    />
+                                                    
+                                                    <div className="cow-editor-title-group">
+                                                        <h2 className="cow-editor-title">🐄 {persons.find(p => p.personId === selectedCowId)?.name}</h2>
+                                                        <p className="cow-editor-subtitle">ID: {selectedCowId} | Month: {selectedMonth}</p>
+                                                    </div>
                                                 </div>
                                                 
                                                 <div className="cow-editor-actions">
@@ -1122,7 +1385,7 @@ export default function App() {
                                                 <div className="notes-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                                     <label className="field-label" style={{ margin: 0 }}>📝 Notes</label>
                                                     <div className="notes-status-badge" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
-                                                        <span className={`status-dot ${cowNotesStatus === 'Saved' ? 'saved' : cowNotesStatus === 'Saving...' ? 'saving' : 'unsaved'}`}></span>
+                                                        <span className={`status-dot ${cowNotesStatus === 'Saved' ? 'saved' : cowNotesStatus === 'Saving...' ? 'saving' : cowNotesStatus === 'Saving Image...' ? 'saving' : 'unsaved'}`}></span>
                                                         <span className="status-text">{cowNotesStatus}</span>
                                                     </div>
                                                 </div>
@@ -1201,6 +1464,63 @@ export default function App() {
                             <div className="modal-footer-actions">
                                 <button type="button" className="btn btn-outline" onClick={() => setEditModalOpen(false)}>Cancel</button>
                                 <button type="submit" className="btn btn-primary">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            {/* Add Expenditure Modal Dialog */}
+            <div className={`modal ${isExpModalOpen ? 'open' : ''}`}>
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h2 className="modal-title">Add Expenditure</h2>
+                        <button className="modal-close" onClick={() => setIsExpModalOpen(false)}>&times;</button>
+                    </div>
+                    <div className="modal-body">
+                        <form onSubmit={handleAddExpenditure}>
+                            <div className="form-group">
+                                <label htmlFor="exp-title" className="form-label">Description / Title</label>
+                                <input 
+                                    type="text" 
+                                    id="exp-title" 
+                                    className="form-control" 
+                                    placeholder="e.g. Feeds, Medicine, Worker Salary"
+                                    value={expTitle}
+                                    onChange={(e) => setExpTitle(e.target.value)}
+                                    required 
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label htmlFor="exp-amount" className="form-label">Amount (₹)</label>
+                                <input 
+                                    type="number" 
+                                    id="exp-amount" 
+                                    className="form-control" 
+                                    placeholder="e.g. 1500" 
+                                    min="0" 
+                                    value={expAmount}
+                                    onChange={(e) => setExpAmount(e.target.value)}
+                                    required 
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label htmlFor="exp-date" className="form-label">Date</label>
+                                <input 
+                                    type="date" 
+                                    id="exp-date" 
+                                    className="form-control" 
+                                    value={expDate}
+                                    onChange={(e) => setExpDate(e.target.value)}
+                                    required 
+                                />
+                            </div>
+
+                            <div className="modal-footer-actions">
+                                <button type="button" className="btn btn-outline" onClick={() => setIsExpModalOpen(false)}>Cancel</button>
+                                <button type="submit" className="btn btn-primary">Add Record</button>
                             </div>
                         </form>
                     </div>
