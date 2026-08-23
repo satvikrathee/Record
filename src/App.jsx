@@ -50,11 +50,18 @@ export default function App() {
     const [activeBannerShift, setActiveBannerShift] = useState(null);
     const [bannerText, setBannerText] = useState('');
     const [dismissedReminders, setDismissedReminders] = useState(() => {
-        const local = localStorage.getItem('doodh_tracker_dismissed_v2');
+        const local = localStorage.getItem('satvik_dairy_track_dismissed_v2');
         return local ? JSON.parse(local) : {};
     });
     const [deferredPrompt, setDeferredPrompt] = useState(null);
     const [notificationPermission, setNotificationPermission] = useState('default');
+
+    // Multi-Person States
+    const [persons, setPersons] = useState([]);
+    const [activePersonId, setActivePersonId] = useState('1');
+    const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+    const [modalNames, setModalNames] = useState({});
+    const [activeTab, setActiveTab] = useState('log'); // 'log' or 'history'
 
     // Edit Modal State
     const [editModalOpen, setEditModalOpen] = useState(false);
@@ -80,6 +87,9 @@ export default function App() {
         // Push notification permission check
         checkBrowserNotificationPermission();
 
+        // Fetch persons list
+        fetchPersons();
+
         // Listen for PWA installation prompt
         const savePrompt = (e) => {
             e.preventDefault();
@@ -94,13 +104,15 @@ export default function App() {
 
     // Save dismissed alerts locally
     useEffect(() => {
-        localStorage.setItem('doodh_tracker_dismissed_v2', JSON.stringify(dismissedReminders));
+        localStorage.setItem('satvik_dairy_track_dismissed_v2', JSON.stringify(dismissedReminders));
     }, [dismissedReminders]);
 
-    // Fetch data whenever selectedMonth changes
+    // Fetch data whenever selectedMonth or activePersonId changes
     useEffect(() => {
-        fetchMonthData();
-    }, [selectedMonth]);
+        if (activePersonId) {
+            fetchMonthData();
+        }
+    }, [selectedMonth, activePersonId]);
 
     // Background timer to check reminders every 30 seconds
     useEffect(() => {
@@ -110,17 +122,55 @@ export default function App() {
     }, [entries, dismissedReminders]);
 
     // --- API Calls ---
+    const fetchPersons = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/persons`);
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                setPersons(data);
+                const namesMap = {};
+                data.forEach(p => {
+                    namesMap[p.personId] = p.name;
+                });
+                setModalNames(namesMap);
+            }
+        } catch (err) {
+            console.error('Error fetching persons list:', err);
+        }
+    };
+
+    const handleSaveAllNames = async (e) => {
+        e.preventDefault();
+        try {
+            for (const [id, name] of Object.entries(modalNames)) {
+                const current = persons.find(p => p.personId === id);
+                if (current && current.name !== name) {
+                    await fetch(`${API_BASE}/api/persons/rename`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ personId: id, name })
+                    });
+                }
+            }
+            await fetchPersons();
+            setIsManageModalOpen(false);
+        } catch (err) {
+            console.error('Error saving names:', err);
+            alert('Names save karne me error aayi.');
+        }
+    };
+
     const fetchMonthData = async () => {
         try {
             // 1. Fetch entries
-            const entriesRes = await fetch(`${API_BASE}/api/entries/${selectedMonth}`);
+            const entriesRes = await fetch(`${API_BASE}/api/entries/${selectedMonth}?personId=${activePersonId}`);
             const entriesData = await entriesRes.json();
             if (Array.isArray(entriesData)) {
                 setEntries(entriesData);
             }
 
             // 2. Fetch rate & notes configuration
-            const configRes = await fetch(`${API_BASE}/api/month-config/${selectedMonth}`);
+            const configRes = await fetch(`${API_BASE}/api/month-config/${selectedMonth}?personId=${activePersonId}`);
             const configData = await configRes.json();
             setMonthlyRate(configData.rate > 0 ? configData.rate : '');
             setMonthlyNotes(configData.notes || '');
@@ -150,21 +200,23 @@ export default function App() {
                 body: JSON.stringify({
                     date: formDate,
                     shift: formShift,
-                    quantity: qty
+                    quantity: qty,
+                    personId: activePersonId
                 })
             });
-            await res.json();
+            const data = await res.json();
             
-            // Clean form qty
-            setFormQty('');
-            
-            // Refresh
-            await fetchMonthData();
-            
-            // Success animation feedback
-            setIsSavingEntry(false);
+            // If data is saved successfully, fetch latest month data
+            if (res.ok) {
+                setFormQty('');
+                await fetchMonthData();
+            } else {
+                alert(data.error || 'Failed to save record.');
+            }
         } catch (err) {
-            console.error('Error saving entry:', err);
+            console.error('Error logging entry:', err);
+            alert('Server connects nahi ho paya.');
+        } finally {
             setIsSavingEntry(false);
         }
     };
@@ -180,7 +232,8 @@ export default function App() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     month: selectedMonth,
-                    rate: parsedRate
+                    rate: parsedRate,
+                    personId: activePersonId
                 })
             });
             setRateStatus('Saved ✓');
@@ -208,7 +261,8 @@ export default function App() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         month: selectedMonth,
-                        notes: val
+                        notes: val,
+                        personId: activePersonId
                     })
                 });
                 setNotesStatus('Auto-saved');
@@ -223,7 +277,7 @@ export default function App() {
     const handleDeleteEntry = async (date) => {
         if (window.confirm(`Kya aap ${formatDisplayDate(date)} ka milk record delete karna chahte hain?`)) {
             try {
-                await fetch(`${API_BASE}/api/entries/${date}`, { method: 'DELETE' });
+                await fetch(`${API_BASE}/api/entries/${date}?personId=${activePersonId}`, { method: 'DELETE' });
                 await fetchMonthData();
             } catch (err) {
                 console.error('Error deleting entry:', err);
@@ -250,7 +304,8 @@ export default function App() {
                 body: JSON.stringify({
                     date: editDate,
                     morning: parseFloat(editMorningQty) || 0,
-                    evening: parseFloat(editEveningQty) || 0
+                    evening: parseFloat(editEveningQty) || 0,
+                    personId: activePersonId
                 })
             });
             setEditModalOpen(false);
@@ -263,7 +318,7 @@ export default function App() {
     // --- CSV Download Handler ---
     const handleDownloadCSV = () => {
         // Simple download action: open the browser endpoint in a new tab/window
-        window.open(`${API_BASE}/api/export/${selectedMonth}`, '_blank');
+        window.open(`${API_BASE}/api/export/${selectedMonth}?personId=${activePersonId}`, '_blank');
     };
 
     // --- Notifications & Reminders Engine ---
@@ -281,10 +336,26 @@ export default function App() {
             Notification.requestPermission().then(permission => {
                 setNotificationPermission(permission);
                 if (permission === 'granted') {
-                    new Notification('Doodh Record', {
-                        body: 'Shukriya! Browser notifications enable ho chuke hain.',
-                        icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="%235A7E71" stroke-width="2"><path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7z"/></svg>'
-                    });
+                    try {
+                        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                            navigator.serviceWorker.ready.then(registration => {
+                                registration.showNotification('Satvik Dairy Track', {
+                                    body: 'Shukriya! Notifications enable ho chuke hain.',
+                                    icon: '/favicon.svg'
+                                });
+                            }).catch(() => {
+                                new Notification('Satvik Dairy Track', {
+                                    body: 'Shukriya! Notifications enable ho chuke hain.'
+                                });
+                            });
+                        } else {
+                            new Notification('Satvik Dairy Track', {
+                                body: 'Shukriya! Notifications enable ho chuke hain.'
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('Native notification failed, using backup:', e);
+                    }
                 }
             });
         }
@@ -341,10 +412,26 @@ export default function App() {
 
         // Push desktop notification if possible
         if (Notification.permission === 'granted') {
-            new Notification('Doodh Record Reminder', {
-                body: msg,
-                icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="%235A7E71" stroke-width="2"><path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7z"/></svg>'
-            });
+            try {
+                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification('Satvik Dairy Track Reminder', {
+                            body: msg,
+                            icon: '/favicon.svg'
+                        });
+                    }).catch(() => {
+                        new Notification('Satvik Dairy Track Reminder', {
+                            body: msg
+                        });
+                    });
+                } else {
+                    new Notification('Satvik Dairy Track Reminder', {
+                        body: msg
+                    });
+                }
+            } catch (e) {
+                console.warn('Native notification failed:', e);
+            }
         }
     };
 
@@ -399,7 +486,7 @@ export default function App() {
                             </svg>
                         </div>
                         <div>
-                            <h1>Doodh Record</h1>
+                            <h1>Satvik Dairy Track</h1>
                             <p className="subtitle">Daily Milk Tracker</p>
                         </div>
                     </div>
@@ -436,6 +523,31 @@ export default function App() {
                             </span>
                         )}
 
+                        {/* Person Selection Dropdown */}
+                        <div className="month-selector-wrapper">
+                            <select 
+                                value={activePersonId} 
+                                onChange={(e) => setActivePersonId(e.target.value)} 
+                                className="month-select person-select"
+                                title="Select a family member's record"
+                            >
+                                {persons.map(p => (
+                                    <option key={p.personId} value={p.personId}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Manage Names Button */}
+                        <button onClick={() => setIsManageModalOpen(true)} className="btn btn-export btn-sm" title="Manage names of all 10 profiles">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            Manage Names
+                        </button>
+
                         {/* Excel Export Button */}
                         <button onClick={handleDownloadCSV} className="btn btn-export btn-sm" title="Download Monthly CSV Report">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -461,9 +573,25 @@ export default function App() {
                     </div>
                 </header>
 
-                <main className="app-grid">
+                {/* Tab Navigation selectors */}
+                <div className="tab-navigation">
+                    <button 
+                        className={`tab-btn ${activeTab === 'log' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('log')}
+                    >
+                        ✍️ Log &amp; Summary
+                    </button>
+                    <button 
+                        className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('history')}
+                    >
+                        📅 Daily Logs ({entries.length})
+                    </button>
+                </div>
+
+                <main className="app-grid single-column">
                     {/* Left Panel */}
-                    <section className="left-panel">
+                    <section className={`left-panel ${activeTab === 'log' ? '' : 'hidden-panel'}`}>
                         
                         {/* Month Summary metrics */}
                         <div className="summary-section">
@@ -645,7 +773,7 @@ export default function App() {
                     </section>
 
                     {/* Right Panel / Timelines */}
-                    <section className="right-panel">
+                    <section className={`right-panel ${activeTab === 'history' ? '' : 'hidden-panel'}`}>
                         <div className="timeline-container">
                             <div className="timeline-header">
                                 <h2 className="section-title">Daily Logs</h2>
@@ -739,7 +867,7 @@ export default function App() {
                 </main>
 
                 <footer className="app-footer">
-                    <p>Doodh Record &copy; 2026. Made by Satvik Rathee.</p>
+                    <p>Satvik Dairy Track &copy; 2026. Made by Satvik Rathee.</p>
                 </footer>
             </div>
 
@@ -785,6 +913,39 @@ export default function App() {
                             <div className="modal-footer-actions">
                                 <button type="button" className="btn btn-outline" onClick={() => setEditModalOpen(false)}>Cancel</button>
                                 <button type="submit" className="btn btn-primary">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            {/* Manage Family Members Names Modal Dialog */}
+            <div className={`modal ${isManageModalOpen ? 'open' : ''}`}>
+                <div className="modal-content large">
+                    <div className="modal-header">
+                        <h2 className="modal-title">Manage Family Members</h2>
+                        <button className="modal-close" onClick={() => setIsManageModalOpen(false)}>&times;</button>
+                    </div>
+                    <div className="modal-body">
+                        <form onSubmit={handleSaveAllNames}>
+                            <p className="help-text">Aap yahan sabhi 10 persons ke name customize kar sakte hain:</p>
+                            <div className="rename-grid">
+                                {persons.map(p => (
+                                    <div key={p.personId} className="rename-field-row">
+                                        <label className="person-number-label">Person {p.personId}</label>
+                                        <input 
+                                            type="text" 
+                                            value={modalNames[p.personId] || ''} 
+                                            onChange={(e) => setModalNames({ ...modalNames, [p.personId]: e.target.value })}
+                                            className="rename-input"
+                                            required
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="modal-footer-actions">
+                                <button type="button" className="btn btn-outline" onClick={() => setIsManageModalOpen(false)}>Cancel</button>
+                                <button type="submit" className="btn btn-primary">Save All Changes</button>
                             </div>
                         </form>
                     </div>

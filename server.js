@@ -26,14 +26,29 @@ const JSON_DB_FILE = './database.json';
 // Local JSON Database Helper Functions
 function readLocalDB() {
     if (!fs.existsSync(JSON_DB_FILE)) {
-        return { entries: {}, configs: {} };
+        // Initialize with default 10 persons
+        const db = {
+            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Person ${i + 1}` })),
+            entries: [],
+            configs: []
+        };
+        writeLocalDB(db);
+        return db;
     }
     try {
         const raw = fs.readFileSync(JSON_DB_FILE, 'utf8');
-        return JSON.parse(raw) || { entries: {}, configs: {} };
+        const data = JSON.parse(raw) || {};
+        if (!data.persons) data.persons = Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Person ${i + 1}` }));
+        if (!data.entries) data.entries = [];
+        if (!data.configs) data.configs = [];
+        return data;
     } catch (e) {
         console.error('Error reading database.json, returning empty structure.', e);
-        return { entries: {}, configs: {} };
+        return {
+            persons: Array.from({ length: 10 }, (_, i) => ({ personId: String(i + 1), name: `Person ${i + 1}` })),
+            entries: [],
+            configs: []
+        };
     }
 }
 
@@ -45,12 +60,55 @@ function writeLocalDB(data) {
     }
 }
 
+// Schemas & Models
+const PersonSchema = new mongoose.Schema({
+    personId: { type: String, required: true, unique: true },
+    name: { type: String, required: true }
+});
+
+const EntrySchema = new mongoose.Schema({
+    date: { type: String, required: true }, // Format: YYYY-MM-DD
+    personId: { type: String, required: true, default: '1' },
+    morning: { type: Number, default: 0 },
+    evening: { type: Number, default: 0 }
+});
+// Compound index to ensure uniqueness of entries per person per date
+EntrySchema.index({ date: 1, personId: 1 }, { unique: true });
+
+const MonthConfigSchema = new mongoose.Schema({
+    month: { type: String, required: true }, // Format: YYYY-MM
+    personId: { type: String, required: true, default: '1' },
+    rate: { type: Number, default: 0 },
+    notes: { type: String, default: '' }
+});
+// Compound index to ensure uniqueness of rates/notes per person per month
+MonthConfigSchema.index({ month: 1, personId: 1 }, { unique: true });
+
+const Person = mongoose.model('Person', PersonSchema);
+const Entry = mongoose.model('Entry', EntrySchema);
+const MonthConfig = mongoose.model('MonthConfig', MonthConfigSchema);
+
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/doodh-record';
 mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
-  .then(() => {
+  .then(async () => {
       console.log('Connected to MongoDB database successfully.');
       useLocalJSON = false;
+      
+      // Seed default persons if collection is empty
+      try {
+          const count = await Person.countDocuments();
+          if (count === 0) {
+              const defaultPeople = Array.from({ length: 10 }, (_, i) => ({
+                  personId: String(i + 1),
+                  name: `Person ${i + 1}`
+              }));
+              await Person.insertMany(defaultPeople);
+              console.log('Seeded 10 default persons successfully.');
+          }
+      } catch (err) {
+          console.error('Error seeding default persons:', err.message);
+      }
   })
   .catch(err => {
       console.error('\n=========================================');
@@ -61,47 +119,68 @@ mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
       useLocalJSON = true;
   });
 
-// Schemas & Models (Used when MongoDB connects)
-const EntrySchema = new mongoose.Schema({
-    date: { type: String, required: true, unique: true }, // Format: YYYY-MM-DD
-    morning: { type: Number, default: 0 },
-    evening: { type: Number, default: 0 }
-});
-
-const MonthConfigSchema = new mongoose.Schema({
-    month: { type: String, required: true, unique: true }, // Format: YYYY-MM
-    rate: { type: Number, default: 0 },
-    notes: { type: String, default: '' }
-});
-
-const Entry = mongoose.model('Entry', EntrySchema);
-const MonthConfig = mongoose.model('MonthConfig', MonthConfigSchema);
-
 // API Endpoints
 
-// 1. Fetch entries for a specific month (filter by YYYY-MM prefix)
+// 1. Fetch all persons
+app.get('/api/persons', async (req, res) => {
+    if (useLocalJSON) {
+        const db = readLocalDB();
+        return res.json(db.persons);
+    }
+    try {
+        const persons = await Person.find().sort({ personId: 1 });
+        res.json(persons);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. Rename person profile
+app.post('/api/persons/rename', async (req, res) => {
+    const { personId, name } = req.body;
+    if (!personId || !name) {
+        return res.status(400).json({ error: 'personId and name are required.' });
+    }
+    if (useLocalJSON) {
+        const db = readLocalDB();
+        const idx = db.persons.findIndex(p => p.personId === personId);
+        if (idx !== -1) {
+            db.persons[idx].name = name;
+            writeLocalDB(db);
+            return res.json(db.persons[idx]);
+        }
+        return res.status(404).json({ error: 'Person profile not found.' });
+    }
+    try {
+        const p = await Person.findOneAndUpdate({ personId }, { name }, { new: true });
+        res.json(p);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. Fetch entries for a specific month and personId
 app.get('/api/entries/:month', async (req, res) => {
     const month = req.params.month;
+    const personId = req.query.personId || '1';
     
     if (useLocalJSON) {
         const db = readLocalDB();
-        const matching = Object.keys(db.entries)
-            .filter(date => date.startsWith(month))
-            .map(date => ({ date, ...db.entries[date] }));
+        const matching = db.entries.filter(e => e.personId === personId && e.date.startsWith(month));
         return res.json(matching);
     }
 
     try {
-        const entries = await Entry.find({ date: new RegExp('^' + month) });
+        const entries = await Entry.find({ personId, date: new RegExp('^' + month) });
         res.json(entries);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// 2. Add or update daily entry
+// 4. Add or update daily entry
 app.post('/api/entries', async (req, res) => {
-    const { date, shift, quantity } = req.body;
+    const { date, shift, quantity, personId = '1' } = req.body;
     
     if (!date || !shift || quantity === undefined) {
         return res.status(400).json({ error: 'Date, shift and quantity are required.' });
@@ -111,31 +190,33 @@ app.post('/api/entries', async (req, res) => {
 
     if (useLocalJSON) {
         const db = readLocalDB();
-        if (!db.entries[date]) {
-            db.entries[date] = { morning: 0, evening: 0 };
+        let entryIdx = db.entries.findIndex(e => e.date === date && e.personId === personId);
+        if (entryIdx === -1) {
+            db.entries.push({ date, personId, morning: 0, evening: 0 });
+            entryIdx = db.entries.length - 1;
         }
-        db.entries[date][shift] = parsedQty;
+        db.entries[entryIdx][shift] = parsedQty;
 
-        if (db.entries[date].morning === 0 && db.entries[date].evening === 0) {
-            delete db.entries[date];
+        if (db.entries[entryIdx].morning === 0 && db.entries[entryIdx].evening === 0) {
+            db.entries.splice(entryIdx, 1);
             writeLocalDB(db);
             return res.json({ message: 'Entry deleted because both shifts are zero.', deleted: true });
         }
 
         writeLocalDB(db);
-        return res.json({ date, ...db.entries[date] });
+        return res.json(db.entries[entryIdx]);
     }
 
     try {
-        let entry = await Entry.findOne({ date });
+        let entry = await Entry.findOne({ date, personId });
         if (!entry) {
-            entry = new Entry({ date, morning: 0, evening: 0 });
+            entry = new Entry({ date, personId, morning: 0, evening: 0 });
         }
 
         entry[shift] = parsedQty;
 
         if (entry.morning === 0 && entry.evening === 0) {
-            await Entry.deleteOne({ date });
+            await Entry.deleteOne({ date, personId });
             return res.json({ message: 'Entry deleted because both shifts are zero.', deleted: true });
         }
 
@@ -146,9 +227,9 @@ app.post('/api/entries', async (req, res) => {
     }
 });
 
-// 3. Edit multiple shifts in a single call (edit modal)
+// 5. Edit multiple shifts in a single call (edit modal)
 app.post('/api/entries/edit', async (req, res) => {
-    const { date, morning, evening } = req.body;
+    const { date, morning, evening, personId = '1' } = req.body;
     
     if (!date) {
         return res.status(400).json({ error: 'Date is required.' });
@@ -159,26 +240,36 @@ app.post('/api/entries/edit', async (req, res) => {
 
     if (useLocalJSON) {
         const db = readLocalDB();
+        let entryIdx = db.entries.findIndex(e => e.date === date && e.personId === personId);
+        
         if (morningVal === 0 && eveningVal === 0) {
-            delete db.entries[date];
-            writeLocalDB(db);
+            if (entryIdx !== -1) {
+                db.entries.splice(entryIdx, 1);
+                writeLocalDB(db);
+            }
             return res.json({ message: 'Entry deleted.', deleted: true });
         }
 
-        db.entries[date] = { morning: morningVal, evening: eveningVal };
+        if (entryIdx === -1) {
+            db.entries.push({ date, personId, morning: morningVal, evening: eveningVal });
+        } else {
+            db.entries[entryIdx].morning = morningVal;
+            db.entries[entryIdx].evening = eveningVal;
+        }
+        
         writeLocalDB(db);
-        return res.json({ date, ...db.entries[date] });
+        return res.json(entryIdx === -1 ? db.entries[db.entries.length - 1] : db.entries[entryIdx]);
     }
 
     try {
         if (morningVal === 0 && eveningVal === 0) {
-            await Entry.deleteOne({ date });
+            await Entry.deleteOne({ date, personId });
             return res.json({ message: 'Entry deleted.', deleted: true });
         }
 
-        let entry = await Entry.findOne({ date });
+        let entry = await Entry.findOne({ date, personId });
         if (!entry) {
-            entry = new Entry({ date });
+            entry = new Entry({ date, personId });
         }
 
         entry.morning = morningVal;
@@ -191,48 +282,49 @@ app.post('/api/entries/edit', async (req, res) => {
     }
 });
 
-// 4. Delete entry
+// 6. Delete entry
 app.delete('/api/entries/:date', async (req, res) => {
     const dateStr = req.params.date;
+    const personId = req.query.personId || '1';
 
     if (useLocalJSON) {
         const db = readLocalDB();
-        if (db.entries[dateStr]) {
-            delete db.entries[dateStr];
-            writeLocalDB(db);
-            return res.json({ success: true, deletedCount: 1 });
-        }
-        return res.json({ success: true, deletedCount: 0 });
+        const beforeCount = db.entries.length;
+        db.entries = db.entries.filter(e => !(e.date === dateStr && e.personId === personId));
+        writeLocalDB(db);
+        return res.json({ success: true, deletedCount: beforeCount - db.entries.length });
     }
 
     try {
-        const result = await Entry.deleteOne({ date: dateStr });
+        const result = await Entry.deleteOne({ date: dateStr, personId });
         res.json({ success: true, deletedCount: result.deletedCount });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// 5. Fetch rate and notes config for a month
+// 7. Fetch rate and notes config for a month
 app.get('/api/month-config/:month', async (req, res) => {
     const month = req.params.month;
+    const personId = req.query.personId || '1';
 
     if (useLocalJSON) {
         const db = readLocalDB();
-        return res.json(db.configs[month] || { month, rate: 0, notes: '' });
+        const config = db.configs.find(c => c.month === month && c.personId === personId);
+        return res.json(config || { month, personId, rate: 0, notes: '' });
     }
 
     try {
-        const config = await MonthConfig.findOne({ month });
-        res.json(config || { month, rate: 0, notes: '' });
+        const config = await MonthConfig.findOne({ month, personId });
+        res.json(config || { month, personId, rate: 0, notes: '' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// 6. Save/update rate and notes config for a month
+// 8. Save/update rate and notes config for a month
 app.post('/api/month-config', async (req, res) => {
-    const { month, rate, notes } = req.body;
+    const { month, rate, notes, personId = '1' } = req.body;
     
     if (!month) {
         return res.status(400).json({ error: 'Month (YYYY-MM) is required.' });
@@ -240,20 +332,22 @@ app.post('/api/month-config', async (req, res) => {
 
     if (useLocalJSON) {
         const db = readLocalDB();
-        if (!db.configs[month]) {
-            db.configs[month] = { month, rate: 0, notes: '' };
+        let configIdx = db.configs.findIndex(c => c.month === month && c.personId === personId);
+        if (configIdx === -1) {
+            db.configs.push({ month, personId, rate: 0, notes: '' });
+            configIdx = db.configs.length - 1;
         }
-        if (rate !== undefined) db.configs[month].rate = parseFloat(rate) || 0;
-        if (notes !== undefined) db.configs[month].notes = notes;
+        if (rate !== undefined) db.configs[configIdx].rate = parseFloat(rate) || 0;
+        if (notes !== undefined) db.configs[configIdx].notes = notes;
 
         writeLocalDB(db);
-        return res.json(db.configs[month]);
+        return res.json(db.configs[configIdx]);
     }
 
     try {
-        let config = await MonthConfig.findOne({ month });
+        let config = await MonthConfig.findOne({ month, personId });
         if (!config) {
-            config = new MonthConfig({ month, rate: 0, notes: '' });
+            config = new MonthConfig({ month, personId, rate: 0, notes: '' });
         }
 
         if (rate !== undefined) config.rate = parseFloat(rate) || 0;
@@ -266,27 +360,33 @@ app.post('/api/month-config', async (req, res) => {
     }
 });
 
-// 7. Export monthly entries as CSV file
+// 9. Export monthly entries as CSV file
 app.get('/api/export/:month', async (req, res) => {
     try {
         const month = req.params.month;
+        const personId = req.query.personId || '1';
         let entriesList = [];
         let config = { rate: 0, notes: '' };
+        let personName = 'Person ' + personId;
 
         if (useLocalJSON) {
             const db = readLocalDB();
-            config = db.configs[month] || { rate: 0, notes: '' };
-            entriesList = Object.keys(db.entries)
-                .filter(date => date.startsWith(month))
-                .map(date => ({ date, ...db.entries[date] }))
+            config = db.configs.find(c => c.month === month && c.personId === personId) || { rate: 0, notes: '' };
+            entriesList = db.entries.filter(e => e.personId === personId && e.date.startsWith(month))
                 .sort((a, b) => a.date.localeCompare(b.date));
+            const p = db.persons.find(x => x.personId === personId);
+            if (p) personName = p.name;
         } else {
-            entriesList = await Entry.find({ date: new RegExp('^' + month) }).sort({ date: 1 });
-            config = await MonthConfig.findOne({ month }) || { rate: 0, notes: '' };
+            entriesList = await Entry.find({ personId, date: new RegExp('^' + month) }).sort({ date: 1 });
+            config = await MonthConfig.findOne({ month, personId }) || { rate: 0, notes: '' };
+            const p = await Person.findOne({ personId });
+            if (p) personName = p.name;
         }
 
         const rate = config.rate || 0;
-        let csv = 'Date,Day,Morning Qty (Litre),Evening Qty (Litre),Daily Total (Litre),Rate (Rs/Litre),Amount (Rs)\n';
+        let csv = `SATVIK DAIRY TRACK REPORT FOR: ${personName.toUpperCase()}\n`;
+        csv += `Month: ${month}\n\n`;
+        csv += 'Date,Day,Morning Qty (Litre),Evening Qty (Litre),Daily Total (Litre),Rate (Rs/Litre),Amount (Rs)\n';
         
         let grandTotalLitres = 0;
         entriesList.forEach(e => {
@@ -312,7 +412,7 @@ app.get('/api/export/:month', async (req, res) => {
         
         // Send file response
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename=doodh-record-${month}.csv`);
+        res.setHeader('Content-Disposition', `attachment; filename=satvik-dairy-track-${personName.replace(/\s+/g, '_')}-${month}.csv`);
         res.status(200).send(csv);
     } catch (err) {
         res.status(500).send('Error generating export file: ' + err.message);
