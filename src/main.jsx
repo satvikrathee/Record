@@ -17,3 +17,8 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.log('Service Worker registration failed:', err));
   });
 }
+
+// Handle Vite preload errors (e.g. after a new deployment) by reloading the page
+window.addEventListener('vite:preloadError', () => {
+  window.location.reload();
+});
