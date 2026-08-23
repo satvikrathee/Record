@@ -1,14 +1,17 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    {
+      "source": "/((?!assets/|favicon.ico|.*\\..*).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/index.html",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
+          "value": "no-store, max-age=0, must-revalidate"
         }
       ]
     },
