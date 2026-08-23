@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? ''
+    : 'https://record-if3q.onrender.com';
+
 // Date utility functions (local timezone safe)
 function getLocalDateString(date = new Date()) {
     const year = date.getFullYear();
@@ -109,14 +113,14 @@ export default function App() {
     const fetchMonthData = async () => {
         try {
             // 1. Fetch entries
-            const entriesRes = await fetch(`/api/entries/${selectedMonth}`);
+            const entriesRes = await fetch(`${API_BASE}/api/entries/${selectedMonth}`);
             const entriesData = await entriesRes.json();
             if (Array.isArray(entriesData)) {
                 setEntries(entriesData);
             }
 
             // 2. Fetch rate & notes configuration
-            const configRes = await fetch(`/api/month-config/${selectedMonth}`);
+            const configRes = await fetch(`${API_BASE}/api/month-config/${selectedMonth}`);
             const configData = await configRes.json();
             setMonthlyRate(configData.rate > 0 ? configData.rate : '');
             setMonthlyNotes(configData.notes || '');
@@ -140,7 +144,7 @@ export default function App() {
 
         setIsSavingEntry(true);
         try {
-            const res = await fetch('/api/entries', {
+            const res = await fetch(`${API_BASE}/api/entries`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -171,7 +175,7 @@ export default function App() {
         const parsedRate = parseFloat(newRate) || 0;
         setRateStatus('Saving...');
         try {
-            await fetch('/api/month-config', {
+            await fetch(`${API_BASE}/api/month-config`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -199,7 +203,7 @@ export default function App() {
 
         notesTimeoutRef.current = setTimeout(async () => {
             try {
-                await fetch('/api/month-config', {
+                await fetch(`${API_BASE}/api/month-config`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -219,7 +223,7 @@ export default function App() {
     const handleDeleteEntry = async (date) => {
         if (window.confirm(`Kya aap ${formatDisplayDate(date)} ka milk record delete karna chahte hain?`)) {
             try {
-                await fetch(`/api/entries/${date}`, { method: 'DELETE' });
+                await fetch(`${API_BASE}/api/entries/${date}`, { method: 'DELETE' });
                 await fetchMonthData();
             } catch (err) {
                 console.error('Error deleting entry:', err);
@@ -240,7 +244,7 @@ export default function App() {
     const handleEditFormSubmit = async (e) => {
         e.preventDefault();
         try {
-            await fetch('/api/entries/edit', {
+            await fetch(`${API_BASE}/api/entries/edit`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -259,7 +263,7 @@ export default function App() {
     // --- CSV Download Handler ---
     const handleDownloadCSV = () => {
         // Simple download action: open the browser endpoint in a new tab/window
-        window.open(`/api/export/${selectedMonth}`, '_blank');
+        window.open(`${API_BASE}/api/export/${selectedMonth}`, '_blank');
     };
 
     // --- Notifications & Reminders Engine ---
