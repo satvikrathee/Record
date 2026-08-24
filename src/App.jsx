@@ -129,6 +129,14 @@ export default function App() {
     // Fetch data whenever selectedMonth changes
     useEffect(() => {
         fetchMonthData();
+
+        // Auto re-fetch whenever the user returns to this browser tab
+        const handleFocus = () => {
+            fetchMonthData();
+        };
+
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
     }, [selectedMonth]);
 
     // Fetch cow notes when active cow or selected month changes

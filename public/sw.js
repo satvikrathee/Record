@@ -20,27 +20,28 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// 3. Network-first strategy for navigation requests (HTML)
+// 3. Fetch strategy: Network-only for API, Network-first for navigation, Cache-first for static assets
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // 1. NEVER cache API requests (always live from Render/MongoDB)
+  if (url.pathname.startsWith('/api') || url.hostname.includes('onrender.com')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // 2. Network-First strategy for HTML navigation
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request) || caches.match('/'))
+      fetch(event.request).catch(() => caches.match(event.request))
     );
     return;
   }
 
-  // Stale-while-revalidate for static assets
+  // 3. Cache-First for static UI assets (icons, css, images) only
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
-        }
-        return networkResponse;
-      }).catch(() => cachedResponse);
-
-      return cachedResponse || fetchPromise;
+      return cachedResponse || fetch(event.request);
     })
   );
 });
