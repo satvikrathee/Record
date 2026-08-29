@@ -33,6 +33,7 @@ export default function App() {
     const [selectedMonth, setSelectedMonth] = useState(getLocalMonthString());
     const [monthsDropdown, setMonthsDropdown] = useState([]);
     const [entries, setEntries] = useState([]); // [{ _id, date, morning, evening }]
+    const [todayEntry, setTodayEntry] = useState({ morning: 0, evening: 0 });
     const [monthlyRate, setMonthlyRate] = useState('');
     const [monthlyNotes, setMonthlyNotes] = useState('');
     
@@ -331,6 +332,24 @@ export default function App() {
             if (Array.isArray(entriesData)) {
                 setEntries(entriesData);
             }
+
+            // Find or fetch today's record
+            const currentMonthStr = getLocalMonthString();
+            let todayRecordData = null;
+            if (selectedMonth === currentMonthStr) {
+                if (Array.isArray(entriesData)) {
+                    todayRecordData = entriesData.find(e => e.date === todayStr);
+                }
+            } else {
+                const todayMonthRes = await fetch(`${API_BASE}/api/entries/${currentMonthStr}?personId=household`);
+                if (todayMonthRes.ok) {
+                    const todayMonthData = await todayMonthRes.json();
+                    if (Array.isArray(todayMonthData)) {
+                        todayRecordData = todayMonthData.find(e => e.date === todayStr);
+                    }
+                }
+            }
+            setTodayEntry(todayRecordData || { morning: 0, evening: 0 });
 
             // 2. Fetch rate & notes configuration
             const configRes = await fetch(`${API_BASE}/api/month-config/${selectedMonth}?personId=household`);
@@ -961,6 +980,31 @@ export default function App() {
                                 {formDate === todayStr ? 'Today: ' : 'Selected: '} 
                                 <strong>{formatDisplayDate(formDate)}</strong>
                             </p>
+
+                            {/* Today's Saved Milk Preview */}
+                            <div className="today-milk-preview">
+                                <div className="preview-label">Today's Saved Record</div>
+                                <div className="preview-values">
+                                    <div className="preview-shift morning">
+                                        <span className="shift-icon">🌅</span>
+                                        <span className="shift-name">Morning:</span>
+                                        {todayEntry.morning > 0 ? (
+                                            <span className="qty-badge saved">✓ {todayEntry.morning} L</span>
+                                        ) : (
+                                            <span className="qty-badge empty">✗ Not Saved</span>
+                                        )}
+                                    </div>
+                                    <div className="preview-shift evening">
+                                        <span className="shift-icon">🌙</span>
+                                        <span className="shift-name">Evening:</span>
+                                        {todayEntry.evening > 0 ? (
+                                            <span className="qty-badge saved">✓ {todayEntry.evening} L</span>
+                                        ) : (
+                                            <span className="qty-badge empty">✗ Not Saved</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
                             
                             <form onSubmit={handleLogEntrySubmit}>
                                 {/* Date */}
@@ -999,7 +1043,10 @@ export default function App() {
                                                 <line x1="1" y1="12" x2="3" y2="12"></line>
                                                 <line x1="21" y1="12" x2="23" y2="12"></line>
                                             </svg>
-                                            Morning
+                                            <span>Morning</span>
+                                            <span className={`shift-status-indicator ${todayEntry.morning > 0 ? 'tick' : 'cross'}`}>
+                                                {todayEntry.morning > 0 ? '✓' : '✗'}
+                                            </span>
                                         </label>
 
                                         <input 
@@ -1014,7 +1061,10 @@ export default function App() {
                                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
                                                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                                             </svg>
-                                            Evening
+                                            <span>Evening</span>
+                                            <span className={`shift-status-indicator ${todayEntry.evening > 0 ? 'tick' : 'cross'}`}>
+                                                {todayEntry.evening > 0 ? '✓' : '✗'}
+                                            </span>
                                         </label>
                                     </div>
                                 </div>
