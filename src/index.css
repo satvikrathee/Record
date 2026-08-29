@@ -1985,9 +1985,11 @@ body {
 }
 
 .today-milk-preview .preview-values {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
     gap: 16px;
+    flex-wrap: wrap;
 }
 
 .today-milk-preview .preview-shift {
@@ -1999,10 +2001,11 @@ body {
 }
 
 .today-milk-preview .qty-badge {
-    padding: 3px 10px;
+    padding: 4px 10px;
     border-radius: 8px;
     font-size: 0.85rem;
     font-weight: 700;
+    white-space: nowrap;
 }
 
 .today-milk-preview .qty-badge.saved {
@@ -2014,6 +2017,35 @@ body {
     background-color: rgba(231, 76, 60, 0.1);
     color: #e74c3c;
 }
+
+.today-milk-preview .shift-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.today-milk-preview .preview-shift.morning .shift-icon svg {
+    color: var(--accent-blue);
+}
+
+.today-milk-preview .preview-shift.evening .shift-icon {
+    color: var(--text-main);
+}
+
+
+@media (max-width: 480px) {
+    .today-milk-preview .preview-values {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    
+    .today-milk-preview .preview-shift {
+        justify-content: space-between;
+        width: 100%;
+    }
+}
+
 
 /* Shift Label Status Indicators */
 .shift-status-indicator {
